@@ -3,6 +3,7 @@ import logging
 import os
 import pickle
 import numpy as np
+import pandas as pd
 import torch
 import paddle
 from matplotlib import pyplot as plt
@@ -10,15 +11,18 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 from sklearn.metrics import precision_recall_fscore_support, roc_auc_score
 from torch.utils.data import DataLoader
+
+from batch_predict import batch_predict_begin
+from core_code.d2_utils.tools import get_resource_path
 from pahelix.datasets.inmemory_dataset import InMemoryDataset
 from pyqt5_plugins.examplebuttonplugin import QtGui
 from pahelix.model_zoo.gem_model import GeoGNNModel
 
 # 对本项目文件的依赖
-from train_util.Focal_Loss import focal_loss
-from train_util.MYmodel_final import theModel_final, Model_d2d3
-from train_util.dataset import MYDataset
-from train_util.featurizer import DownstreamCollateFn
+from core_code.Focal_Loss import focal_loss
+from core_code.MYmodel_final import theModel_final, Model_d2d3
+from core_code.dataset import MYDataset
+from core_code.featurizer import DownstreamCollateFn
 
 def abnorm(df):
     idx_failed_ecfp = []
@@ -47,28 +51,20 @@ def create_logger():
     formatter = logging.Formatter(
         '%(asctime)s - %(levelname)s - %(message)s')
     file_handler = logging.FileHandler(
-        filename="./train_util/casp.log")
+        filename=get_resource_path("./log/1.log"))
     file_handler.setFormatter(formatter)
     file_handler.setLevel(logging.INFO)
     logger.addHandler(file_handler)
     return logger
 
-def get_resource_path(relative_path):
-    """获取资源的绝对路径，兼容开发环境和打包后的exe"""
-    try:
-        # 打包后的exe运行时，sys._MEIPASS会被设置
-        base_path = sys._MEIPASS
-    except AttributeError:
-        # 开发环境，使用当前文件所在目录
-        base_path = os.path.abspath(".")
-    return os.path.join(base_path, relative_path)
+
 
 
 def train_begin(ui, epoch=60, batch_size=32, lr=0.004, if_3d=False,save_model_path=None):
     BATCH_SIZE = batch_size
     EPOCH = epoch
     RATE = lr
-    PATIENCE=20
+    PATIENCE=30
     OPTIM = 'SGD'
     LOSS_FUN = "focal"
 
@@ -150,6 +146,7 @@ def train_begin(ui, epoch=60, batch_size=32, lr=0.004, if_3d=False,save_model_pa
     train_auc = []
     max_auc_epoch=-1
     max_auc = -1
+    best_model = None
     for i in range(EPOCH):
         train_epoch_loss = 0  # 等于每一批次的损失值之和
         train_epoch_true = 0
@@ -157,8 +154,9 @@ def train_begin(ui, epoch=60, batch_size=32, lr=0.004, if_3d=False,save_model_pa
         epoch_train_y_predict = []
         logger.info("-------第 {} 轮训练开始-------".format(i + 1))
         logger.info("训练部分开始...")
-        ui.textBrowser_train_process.append("-------第{}轮训练开始-------\n训练部分开始...\n".format(i + 1))
-        ui.textBrowser_train_process.moveCursor(ui.textBrowser_train_process.textCursor().End)
+        if ui is not None:
+            ui.textBrowser_train_process.append("-------第{}轮训练开始-------\n训练部分开始...\n".format(i + 1))
+            ui.textBrowser_train_process.moveCursor(ui.textBrowser_train_process.textCursor().End)
         # 只对部分图层有作用，开启dropout
         model.train()
         if if_3d:
@@ -169,8 +167,8 @@ def train_begin(ui, epoch=60, batch_size=32, lr=0.004, if_3d=False,save_model_pa
                 node_repr, edge_repr, graph_repr = compound_encoder(atom_bond_graphs, bond_angle_graphs)
                 # 正则化
                 graph_repr = norm(graph_repr)
-                mol_vec, targets = data
-                outputs = model(mol_vec, graph_repr)
+                mol_vec,garm, targets = data
+                outputs = model(mol_vec,garm, graph_repr)
 
 
                 list_auc = outputs[:, 1]
@@ -186,8 +184,8 @@ def train_begin(ui, epoch=60, batch_size=32, lr=0.004, if_3d=False,save_model_pa
                 train_epoch_true += accuracy_num
         else:
             for data in train_dataloader:
-                mol_vec, targets = data
-                outputs = model(mol_vec)
+                mol_vec,garm, targets = data
+                outputs = model(mol_vec,garm)
 
                 #======与3维度处理的部分一样=======
                 list_auc = outputs[:, 1]
@@ -208,12 +206,13 @@ def train_begin(ui, epoch=60, batch_size=32, lr=0.004, if_3d=False,save_model_pa
         train_auc.append(train_auc_epoch)
         logger.info(f"训练集已完成，当前是轮{i + 1}，训练集上的总命中个数是{train_epoch_true}/{train_data_size}，准确率"
                     f"是{train_epoch_acc}，查准率precious是{p}，查全率recall是{r}，f1是{f},AUC为{train_auc_epoch}")
-        ui.textBrowser_train_process.append(
-            f"训练集已完成，当前是轮{i + 1}，训练集上的总命中个数是{train_epoch_true}/"
-            f"{train_data_size}，准确率是{train_epoch_acc}，查准率precious是"
-            f"{p}，查全率recall是{r}，f1是{f},"
-            f"AUC为{train_auc_epoch}\n")
-        ui.textBrowser_train_process.moveCursor(ui.textBrowser_train_process.textCursor().End)
+        if ui is not None:
+            ui.textBrowser_train_process.append(
+                f"训练集已完成，当前是轮{i + 1}，训练集上的总命中个数是{train_epoch_true}/"
+                f"{train_data_size}，准确率是{train_epoch_acc}，查准率precious是"
+                f"{p}，查全率recall是{r}，f1是{f},"
+                f"AUC为{train_auc_epoch}\n")
+            ui.textBrowser_train_process.moveCursor(ui.textBrowser_train_process.textCursor().End)
         train_acc.append(train_epoch_acc.item())
         train_p.append(p)
         train_r.append(r)
@@ -227,17 +226,18 @@ def train_begin(ui, epoch=60, batch_size=32, lr=0.004, if_3d=False,save_model_pa
         model.eval()
         with torch.no_grad():
             logger.info("验证部分开始...")
-            ui.textBrowser_train_process.append("验证部分开始...\n")
-            ui.textBrowser_train_process.moveCursor(ui.textBrowser_train_process.textCursor().End)
+            if ui is not None:
+                ui.textBrowser_train_process.append("验证部分开始...\n")
+                ui.textBrowser_train_process.moveCursor(ui.textBrowser_train_process.textCursor().End)
             if if_3d:
                 for data, geo_data in zip(test_dataloader, geo_loader_test):
-                    mol_vec, targets = data
+                    mol_vec,garm, targets = data
                     atom_bond_graphs, bond_angle_graphs = geo_data
                     atom_bond_graphs = atom_bond_graphs.tensor()
                     bond_angle_graphs = bond_angle_graphs.tensor()
                     node_repr, edge_repr, graph_repr = compound_encoder(atom_bond_graphs, bond_angle_graphs)
                     graph_repr = norm(graph_repr)
-                    outputs = model(mol_vec, graph_repr)
+                    outputs = model(mol_vec,garm, graph_repr)
                     loss = loss_fn(outputs, targets)
                     test_epoch_loss += loss.item()
                     list_auc = outputs[:, 1]
@@ -248,8 +248,8 @@ def train_begin(ui, epoch=60, batch_size=32, lr=0.004, if_3d=False,save_model_pa
                     test_epoch_true += test_accuracy_num
             else:
                 for data in test_dataloader:
-                    mol_vec, targets = data
-                    outputs = model(mol_vec)
+                    mol_vec,garm, targets = data
+                    outputs = model(mol_vec,garm)
                     loss = loss_fn(outputs, targets)
                     test_epoch_loss += loss.item()
                     list_auc = outputs[:, 1]
@@ -265,10 +265,11 @@ def train_begin(ui, epoch=60, batch_size=32, lr=0.004, if_3d=False,save_model_pa
         test_auc.append(test_auc_epoch)
         logger.info(f"测试集已完成，当前是轮{i + 1}，测试集上的总命中个数是{test_epoch_true}/{test_data_size}，"
                     f"准确率是{test_epoch_acc}，查准率precious是{p}，查全率recall是{r}，f1是{f}，AUC是{test_auc_epoch}")
-        ui.textBrowser_train_process.append(
-            f"测试集已完成，当前是轮{i + 1}，测试集上的总命中个数是{test_epoch_true}/{test_data_size}，"
-            f"准确率是{test_epoch_acc}，查准率precious是{p}，查全率recall是{r}，f1是{f}，AUC是{test_auc_epoch}")
-        ui.textBrowser_train_process.moveCursor(ui.textBrowser_train_process.textCursor().End)
+        if ui is not None:
+            ui.textBrowser_train_process.append(
+                f"测试集已完成，当前是轮{i + 1}，测试集上的总命中个数是{test_epoch_true}/{test_data_size}，"
+                f"准确率是{test_epoch_acc}，查准率precious是{p}，查全率recall是{r}，f1是{f}，AUC是{test_auc_epoch}")
+            ui.textBrowser_train_process.moveCursor(ui.textBrowser_train_process.textCursor().End)
         test_acc.append(test_epoch_acc.item())
         test_loss.append(test_epoch_loss / test_need_batch)
         # 存储最佳模型
@@ -276,32 +277,54 @@ def train_begin(ui, epoch=60, batch_size=32, lr=0.004, if_3d=False,save_model_pa
             patience = 0
             max_auc = test_auc_epoch
             max_auc_epoch=i+1
-            logger.info(f"当前的auc最佳。当前轮数是{i + 1}，存储这一轮的模型")
-            torch.save(model, save_model_path)
+            logger.info(f"当前的auc最佳。当前轮数是{i + 1}，保存这一轮的模型")
+            best_model = model
         else:
             patience+=1
         test_p.append(p)
         test_r.append(r)
         test_f.append(f)
         if patience==PATIENCE:
+            print("此处早停")
             break
-    logger.info(f"第{max_auc_epoch}轮的模型在测试集上的准确率最高，值为：{max_auc}")
+    logger.info(f"第{max_auc_epoch}轮的模型在验证集上的 AUC 值最高，值为：{max_auc}")
+    if ui is not None:
+        torch.save(best_model, os.path.join(save_model_path, "best_model.pth"))
     # 显示出折线图
-    list_x = list(range(1, EPOCH + 1))
-    plt.plot(list_x, train_auc, label='训练集', color='green', alpha=0.5)
-    plt.plot(list_x, test_auc, label='测试集', color='red', alpha=0.5)
-    plt.legend(prop='STSong')
-    plt.title("ROC-AUC的变化曲线图", fontproperties='STSong')
-    plt.xlabel("轮数", fontproperties='STSong')
-    plt.ylabel("曲线下面积大小", fontproperties='STSong')
-    plt.figure(figsize=(420, 310))
-    plt.savefig(get_resource_path("./tmp/fig/1.jpg"), bbox_inches='tight', pad_inches=0)
-    plt.clf()  # 重置plt.避免上面的线也会画到下面的画布中去
-    plt.plot(list_x, train_loss, label='训练集', color='green', alpha=0.5)
-    plt.plot(list_x, test_loss, label='测试集', color='red', alpha=0.5)
-    plt.legend(prop='STSong', loc="best")
-    plt.title("损失值变化曲线", fontproperties='STSong')
-    plt.xlabel("轮数", fontproperties='STSong')
-    plt.savefig(get_resource_path("./tmp/fig/2.jpg"), bbox_inches='tight', pad_inches=0)
-    ui.label_auc.setPixmap(QtGui.QPixmap(get_resource_path("./tmp/fig/1.jpg")))
-    ui.label_loss.setPixmap(QtGui.QPixmap(get_resource_path("./tmp/fig/2.jpg")))
+    if ui is not None:
+        print("没有UI")
+        list_x = list(range(1, len(train_auc) + 1))
+        plt.figure(figsize=(6, 6))
+        plt.plot(list_x, train_auc, label='训练集', color='green', alpha=0.5)
+        plt.plot(list_x, test_auc, label='验证集', color='red', alpha=0.5)
+        plt.legend(prop='STSong')
+        plt.title("ROC-AUC的变化曲线图", fontproperties='STSong')
+        plt.xlabel("轮数", fontproperties='STSong')
+        plt.ylabel("曲线下面积大小", fontproperties='STSong')
+        plt.tight_layout()
+        plt.savefig(get_resource_path("./tmp/fig1.jpg"), pad_inches=0.1)
+        plt.clf()  # 重置plt.避免上面的线也会画到下面的画布中去
+        # plt.figure(figsize=(10, 6))  #这行负责新建一个画布，如果新建就不需要 clf 了
+        plt.plot(list_x, train_loss, label='训练集', color='green', alpha=0.5)
+        plt.plot(list_x, test_loss, label='测试集', color='red', alpha=0.5)
+        plt.legend(prop='STSong', loc="best")
+        plt.title("损失值变化曲线", fontproperties='STSong')
+        plt.xlabel("轮数", fontproperties='STSong')
+        plt.tight_layout()
+        plt.savefig(get_resource_path("./tmp/fig2.jpg"), pad_inches=0.1)
+        # 设置QLabel的缩放属性
+        ui.label_auc.setScaledContents(True)  # 让图片自适应QLabel大小
+        ui.label_loss.setScaledContents(True)
+        ui.label_auc.setPixmap(QtGui.QPixmap(get_resource_path("./tmp/fig1.jpg")))
+        ui.label_loss.setPixmap(QtGui.QPixmap(get_resource_path("./tmp/fig2.jpg")))
+    else:
+        print(model)
+        print(best_model)
+        return best_model
+
+
+if __name__ == '__main__':
+    model=train_begin(None,120,32,0.001,False)
+    # 训练文件
+    df = pd.read_excel(r"E:\pyqt_bioactivity\test_data\2025-2-28_newsun\test.xlsx")
+    batch_predict_begin(None, df, model, False)

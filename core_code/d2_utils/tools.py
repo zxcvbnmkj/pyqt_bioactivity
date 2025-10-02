@@ -1,15 +1,34 @@
+from __future__ import print_function
+import math
+import numpy as np
+from rdkit import Chem
+import os
+import sys
+import logging
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+
+def get_resource_path(relative_path):
+    """获取资源的绝对路径，兼容开发环境和打包后的exe"""
+    try:
+        # 打包后的exe运行时，sys._MEIPASS会被设置
+        base_path = sys._MEIPASS
+    except AttributeError:
+        # 开发环境，使用当前文件所在目录
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
+
 """
 These are some tool functions for extracting the two-dimensional structure of molecules. This code is based on Python 2 and needs to be partially changed to Python 3 format
 This file uses code from the n_gram_graph library (https://github.com/chao1224/n_gram_graph) by chao1224 (https://github.com/chao1224).
 Licensed under the MIT License (https://github.com/chao1224/n_gram_graph/blob/master/LICENSE).
 """
-from __future__ import print_function
-import math
-import numpy as np
-from rdkit import Chem
-import logging
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+
+
+
+
 
 atom_candidates = ['C', 'Cl', 'I', 'F', 'O', 'N', 'P', 'S', 'Br', 'Unknown']
 
@@ -81,3 +100,39 @@ def num_bond_features():
 
 def get_atom_distance(atom_a, atom_b):
     return math.sqrt((atom_a.x - atom_b.x) ** 2 + (atom_a.y - atom_b.y) ** 2 + (atom_a.z - atom_b.z) ** 2)
+
+
+def extract_feature_and_label_npy(data_file_list, feature_name, n_gram_num):
+    X_data = []
+    for data_file in data_file_list:
+        data = np.load(data_file)
+        X_data_temp = data[feature_name]
+        if X_data_temp.ndim == 4:
+            print('original size\t', X_data_temp.shape)
+            X_data_temp = X_data_temp[:, :n_gram_num, ...]
+            print('truncated size\t', X_data_temp.shape)
+
+            molecule_num, _, embedding_dimension, segmentation_num = X_data_temp.shape
+
+            X_data_temp = X_data_temp.reshape((molecule_num, n_gram_num*embedding_dimension*segmentation_num), order='F')
+
+        elif X_data_temp.ndim == 3:
+            print('original size\t', X_data_temp.shape)
+            X_data_temp = X_data_temp[:, :n_gram_num, ...]
+            print('truncated size\t', X_data_temp.shape)
+            molecule_num, _, embedding_dimension = X_data_temp.shape
+            X_data_temp = X_data_temp.reshape((molecule_num, n_gram_num*embedding_dimension), order='F')
+
+
+        X_data.extend(X_data_temp)
+    X_data = np.stack(X_data)
+    print(X_data.shape)
+    print('X data\t', X_data.shape)
+    return X_data
+
+
+def reshape_data_into_2_dim(data):
+    if data.ndim == 1:
+        n = data.shape[0]
+        data = data.reshape(n, 1)
+    return data
