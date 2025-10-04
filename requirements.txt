@@ -1,0 +1,19 @@
+rdkit==2023.9.1
+numpy==1.26.0
+gensim==4.3.1
+paddlepaddle>=2.0.0
+deepchem
+scikit-learn
+mol2vec==0.2.2
+PyQt5
+torch
+matplotlib
+scipy==1.10.1
+pgl==2.2.6
+ujson
+pandas==2.2.0
+openpyxl  # pandas 读取 excel 文件的必需库
+pyqt5_plugins
+
+#paddlepaddle==2.5.0 need protobuf required: >=3.1.0,<=3.20.2 ,but usually installed: 5.x.x
+#1.26.0 numpy and gensim==4.3.1 match, too low numpy may result in errors
