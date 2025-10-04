@@ -292,7 +292,6 @@ def train_begin(ui, epoch=60, batch_size=32, lr=0.004, if_3d=False,save_model_pa
         torch.save(best_model, os.path.join(save_model_path, "best_model.pth"))
     # 显示出折线图
     if ui is not None:
-        print("没有UI")
         list_x = list(range(1, len(train_auc) + 1))
         plt.figure(figsize=(6, 6))
         plt.plot(list_x, train_auc, label='训练集', color='green', alpha=0.5)
