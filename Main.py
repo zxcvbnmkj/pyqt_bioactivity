@@ -92,12 +92,11 @@ class MyWindow(QWidget):
         self.ui.textBrowser_compounds_file.setText("分子数据集选择成功，它的路径是" + self.compounds_files)
 
     def select_savePath(self):
-        self.save_path = QFileDialog.getExistingDirectory(self.ui, "选择存储路径")
+        self.save_path, selected_filter = QFileDialog.getSaveFileName(self.ui, "请选择存储文件路径（需要是 excel 文件）", "Preprocessed_compounds.xlsx", "Excel Files (*.xlsx)")
         self.ui.textBrowser_savepath.setText("预处理后的文件保存路径选择成功，存储路径为" + self.save_path)
-        self.save_path = self.save_path + "//Preprocessed_compounds.xlsx"
 
     def get_save_model_path(self):
-        self.save_model_path = QFileDialog.getExistingDirectory(self.ui, "选择模型的存储路径")
+        self.save_model_path, _ = QFileDialog.getSaveFileName(self.ui, "请选择模型存储路径", "best_model.pth", "文件类型 (*.pth)")
         self.ui.model_path.setText("模型的存储路径选择成功，路径为" + self.save_model_path)
 
     def select_infer_file(self):
@@ -111,10 +110,9 @@ class MyWindow(QWidget):
             self.ui.textBrowser_infer_file.setText("待预测的分子文件加载成功，它的路径是" + self.infer_file_path)
 
     def save_infer(self):
-        self.save_infer_result = QFileDialog.getExistingDirectory(self.ui, "选择存储预测结果的路径")
+        self.save_infer_result, _ = QFileDialog.getSaveFileName(self.ui, "请选择存储预测结果的路径", "predict_result.xlsx", "Excel Files (*.xlsx)")
         self.ui.textBrowser_save_infer.setText(
-            "预测后的文件保存路径选择成功，存储路径为" + self.save_infer_result + "/predict_result.xlsx")
-        self.save_infer_result = self.save_infer_result + "//predict_result.xlsx"
+            "预测后的文件保存路径选择成功，存储路径为" + self.save_infer_result)
 
     # 点击“开始处理”按钮
     def begin_process(self):
@@ -248,4 +246,3 @@ if __name__ == '__main__':
     w = MyWindow()
     w.ui.show()
     app.exec()
-    os.system("pause")

@@ -268,7 +268,7 @@ def train_begin(ui, epoch=60, batch_size=32, lr=0.004, save_model_path=None, my_
             logger.info(f"Continuous {patience} epochs of AUC without improvement, stop training")
             break
     logger.info(f"The maximum AUC value is {max_auc}")
-    torch.save(best_model, f"{save_model_path}/best_model.pth")
+    torch.save(best_model, save_model_path)
     # 显示出折线图
     if ui is not None:
         list_x = list(range(1, len(train_auc) + 1))

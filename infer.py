@@ -77,9 +77,6 @@ def model_test(model,test_dataloader,geo_loader_test,compound_encoder,norm,devic
     print(prob_value)
     print(predict_value)
     return [prob_value,predict_value]
-    # df=pd.read_excel("./测试集.xlsx")
-    # df["预测"] = ["活性" if value == 1 else "非活性" for value in predict_value]
-    # df.to_excel("./预测结果.xlsx",index=False)
 
 
 def infer(batch_size=32,my_dataset="tmp",device="cpu",save_model_path=None):
@@ -117,16 +114,16 @@ def infer(batch_size=32,my_dataset="tmp",device="cpu",save_model_path=None):
     result=model_test(model, test_dataloader=test_dataloader, geo_loader_test=geo_loader_test,
          compound_encoder=compound_encoder,
          norm=norm,device=device)
-    # files_path = [f"./{my_dataset}_Intermediate/X_test_d1.pkl",
-    #               f"./{my_dataset}_Intermediate/X_test_d2.pkl",
-    #               f"./{my_dataset}_Intermediate/X_test_d3.npz"]
-    # for i in files_path:
-    #     if os.path.exists(i):
-    #         os.remove(i)
-    # return result
+    files_path = [f"./{my_dataset}_Intermediate/X_test_d1.pkl",
+                  f"./{my_dataset}_Intermediate/X_test_d2.pkl",
+                  f"./{my_dataset}_Intermediate/X_test_d3.npz"]
+    for i in files_path:
+        if os.path.exists(i):
+            os.remove(i)
+    return result
 
 def batch_predict_begin(my_dataset="tmp",device="cpu",compounds_files=None,batch_size=32,save_model_path=None):
-    # extract_feat(my_dataset=my_dataset,if_infer=True,device=device,compounds_files=compounds_files)
+    extract_feat(my_dataset=my_dataset,if_infer=True,device=device,compounds_files=compounds_files)
     result=infer(batch_size=batch_size,my_dataset=my_dataset,device=device,save_model_path=save_model_path)
     return result
 
